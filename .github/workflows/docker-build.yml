@@ -1,0 +1,43 @@
+name: Airline Delay API - Docker Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  docker-build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t airline-delay-api:latest .
+
+      - name: Run Docker container
+        run: |
+          docker run -d             --name airline-api             -p 8000:8000             airline-delay-api:latest
+
+      - name: Test API health endpoint
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8000/health; then
+              echo "API health check passed"
+              exit 0
+            fi
+            echo "Waiting for API to start..."
+            sleep 5
+          done
+
+          echo "API failed to become healthy"
+          docker logs airline-api
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: |
+          docker logs airline-api || true
+          docker rm -f airline-api || true
