@@ -36,6 +36,46 @@ jobs:
           docker logs airline-api
           exit 1
 
+      - name: Test flight prediction endpoint
+        run: |
+          curl -fsS -X POST http://localhost:8000/predict             -H "Content-Type: application/json"             -d '{
+              "OP_CARRIER": "9E",
+              "ORIGIN": "CAE",
+              "DEST": "ATL",
+              "DEP_HOUR": 9,
+              "DEP_MINUTE": 30,
+              "ARR_HOUR": 11,
+              "ARR_MINUTE": 15,
+              "CRS_ELAPSED_TIME": 105.0,
+              "DISTANCE": 500.0,
+              "MONTH": 6,
+              "DAY_OF_WEEK": 2
+            }' > prediction.json
+
+          echo "Prediction response:"
+          cat prediction.json
+
+          python -c '
+          import json
+
+          with open("prediction.json") as f:
+              result = json.load(f)
+
+          assert result["prediction"] in (0, 1)
+          assert result["prediction_label"] in ("Delayed", "Not Delayed")
+          assert 0 <= result["delay_probability"] <= 1
+          assert 0 <= result["not_delayed_probability"] <= 1
+          assert abs(
+              result["delay_probability"] +
+              result["not_delayed_probability"] - 1
+          ) < 0.001
+          assert result["delay_threshold_minutes"] == 15
+
+          print("FLIGHT PREDICTION TEST PASSED")
+          print("Predicted class:", result["prediction_label"])
+          print("Delay probability:", result["delay_probability"])
+          '
+
       - name: Stop container
         if: always()
         run: |
