@@ -17,9 +17,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build Docker image
-        run: |
-          docker build -t airline-delay-api:latest .
+        run: docker build -t airline-delay-api:latest .
 
       - name: Run Docker container
         run: |
@@ -32,11 +34,8 @@ jobs:
               echo "API health check passed"
               exit 0
             fi
-            echo "Waiting for API to start..."
             sleep 5
           done
-
-          echo "API failed to become healthy"
           docker logs airline-api
           exit 1
 
@@ -56,12 +55,8 @@ jobs:
               "DAY_OF_WEEK": 2
             }' > prediction.json
 
-          echo "Prediction response:"
-          cat prediction.json
-
           python -c '
           import json
-
           with open("prediction.json") as f:
               result = json.load(f)
 
@@ -76,11 +71,10 @@ jobs:
           assert result["delay_threshold_minutes"] == 15
 
           print("FLIGHT PREDICTION TEST PASSED")
-          print("Predicted class:", result["prediction_label"])
-          print("Delay probability:", result["delay_probability"])
+          print(result)
           '
 
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io             -u "${{ github.actor }}" --password-stdin
 
@@ -88,14 +82,9 @@ jobs:
         run: |
           IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
 
-          docker tag airline-delay-api:latest "$IMAGE_NAME:latest"
-          docker tag airline-delay-api:latest "$IMAGE_NAME:sha-${GITHUB_SHA::7}"
+          docker buildx build             --platform linux/amd64             --tag "$IMAGE_NAME:latest"             --tag "$IMAGE_NAME:sha-${GITHUB_SHA::7}"             --push .
 
-          docker push "$IMAGE_NAME:latest"
-          docker push "$IMAGE_NAME:sha-${GITHUB_SHA::7}"
-
-          echo "Docker image published successfully"
-          echo "$IMAGE_NAME:latest"
+          echo "Published: $IMAGE_NAME:latest"
 
       - name: Stop container
         if: always()
